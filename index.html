@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Classifier Deployment</title>
+    <style>
+        /* -------------------------------------------------- */
+        /* BASE STYLES & LAYOUT */
+        /* -------------------------------------------------- */
+        :root {
+            --primary-color: #3f51b5; /* Deeper Blue/Indigo */
+            --secondary-color: #6c757d;
+            --success-color: #4CAF50; /* Green */
+            --error-color: #f44336; /* Red */
+            --bg-light: #f5f7fa;
+            --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            --border-color: #e0e0e0;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 40px 20px;
+            background-color: var(--bg-light);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .app-container { /* Renamed from .container to .app-container */
+            max-width: 650px;
+            width: 100%;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+        }
+        
+        /* -------------------------------------------------- */
+        /* HEADER & SECTION CARDS */
+        /* -------------------------------------------------- */
+        .app-header {
+            text-align: center;
+            color: var(--primary-color);
+            font-weight: 700;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .section-card { /* New class for the distinct upload/result panels */
+            border: 1px solid var(--border-color);
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            background-color: #ffffff;
+        }
+        
+        .section-card h2 {
+            font-size: 1.2em;
+            color: #333;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+
+        /* -------------------------------------------------- */
+        /* INPUT & BUTTON STYLES */
+        /* -------------------------------------------------- */
+        /* Hiding the default input */
+        #image-upload {
+            display: none;
+        }
+
+        .file-input-label { /* Named component for the custom file button */
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            transition: background-color 0.3s;
+            margin-top: 15px;
+        }
+
+        .file-input-label:hover {
+            background-color: #303f9f;
+        }
+        
+        #file-name-display { /* Named component for the file name text */
+            font-size: 0.9em;
+            color: var(--secondary-color);
+            display: block;
+            margin: 10px 0 20px 0;
+        }
+
+        #predict-button {
+            background-color: var(--success-color);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s;
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        #predict-button:hover {
+            background-color: #388e3c;
+        }
+
+        /* -------------------------------------------------- */
+        /* IMAGE PREVIEW & RESULT */
+        /* -------------------------------------------------- */
+        #preview-wrapper { /* Named component for the image frame */
+            max-width: 100%;
+            max-height: 200px;
+            margin: 15px auto;
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            text-align: center;
+        }
+        
+        #image-preview {
+            max-width: 100%;
+            height: auto;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        
+        #prediction-display { /* Named component for the result text */
+            font-size: 1.1em;
+            line-height: 1.6;
+            padding: 15px;
+            border-left: 5px solid var(--primary-color);
+            background-color: #e8eaf6;
+            border-radius: 4px;
+        }
+        
+        .result-highlight { /* Class for strong prediction text */
+            font-weight: 700;
+            color: var(--success-color); 
+        }
+        
+        /* Loader */
+        .loader { 
+            border: 4px solid #f3f3f3; 
+            border-top: 4px solid var(--primary-color); 
+            border-radius: 50%; 
+            width: 20px; 
+            height: 20px; 
+            animation: spin 1s linear infinite; 
+            display: none; 
+            margin: 15px auto; 
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h1 class="app-header">AI Image Classifier</h1>
+    
+    <div class="section-card" id="upload-section">
+        <h2>1. Image Upload</h2>
+        
+        <label for="image-upload" class="file-input-label">
+            Select Image File
+        </label>
+        <input type="file" id="image-upload" accept="image/*">
+        
+        <span id="file-name-display">No file selected.</span>
+        
+        <div id="preview-wrapper">
+            <img id="image-preview" src="#" alt="Image Preview">
+        </div>
+        
+        <button id="predict-button" onclick="uploadImage()">Get Prediction</button>
+    </div>
+    
+    <div class="section-card" id="result-section">
+        <h2>2. Prediction Result</h2>
+        <div class="loader" id="loader"></div>
+        <p id="prediction-display">Select an image and click 'Get Prediction' above.</p>
+    </div>
+</div>
+
+<script>
+    // JavaScript for file handling and API connection
+    
+    // Naming variables with ALL_CAPS for constants
+    const API_URL = "http://127.0.0.1:8000/predict";
+    const CLASS_TRANSLATIONS = {
+        "cane": "Dog", "cavallo": "Horse", "elefante": "Elephant", "farfalla": "Butterfly",
+        "gallina": "Chicken", "gatto": "Cat", "mucca": "Cow", "pecora": "Sheep",
+        "ragno": "Spider", "scoiattolo": "Squirrel"
+    };
+
+    function getEnglishName(italianName) {
+        return CLASS_TRANSLATIONS[italianName] || italianName;
+    }
+
+    // --- JS for File Preview and Name Update ---
+    document.getElementById('image-upload').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        const previewWrapper = document.getElementById('preview-wrapper');
+        const preview = document.getElementById('image-preview');
+        const fileNameSpan = document.getElementById('file-name-display');
+
+        if (file) {
+            preview.src = URL.createObjectURL(file);
+            previewWrapper.style.display = 'block';
+            fileNameSpan.textContent = `File: ${file.name}`;
+        } else {
+            previewWrapper.style.display = 'none';
+            fileNameSpan.textContent = "No file selected.";
+        }
+        
+        // Reset prediction text
+        document.getElementById('prediction-display').innerHTML = "Ready to predict...";
+    });
+
+    // --- JS for API Upload and Result Display ---
+    async function uploadImage() {
+        const fileInput = document.getElementById('image-upload');
+        const file = fileInput.files[0];
+        const predictionText = document.getElementById('prediction-display');
+        const loader = document.getElementById('loader');
+
+        if (!file) {
+            predictionText.innerHTML = `❌ **Error:** Please select an image file first.`;
+            return;
+        }
+
+        // 1. Show Loading State
+        predictionText.innerHTML = "Processing image...";
+        loader.style.display = 'block';
+
+        // 2. Prepare Form Data
+        const formData = new FormData();
+        formData.append("file", file);
+
+        // 3. Make API Call
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            const englishPrediction = getEnglishName(data.prediction);
+            const italianPrediction = data.prediction;
+
+            // 4. Display Results
+            loader.style.display = 'none';
+            predictionText.innerHTML = `
+                <span style="color: var(--success-color); font-weight: bold;">✅ Prediction Successful</span>
+                <br><br>
+                **Class:** <span class="result-highlight">${englishPrediction}</span> (${italianPrediction}) 
+                <br>
+                **Confidence:** <span class="result-highlight">${data.confidence}</span>
+            `;
+
+        } catch (error) {
+            // 5. Handle Errors
+            loader.style.display = 'none';
+            predictionText.innerHTML = `
+                <span style="color: var(--error-color); font-weight: bold;">❌ Prediction Failed</span>
+                <br>
+                ${error.message}
+            `;
+            console.error('Fetch error:', error);
+        }
+    }
+</script>
+
+</body>
+</html>
